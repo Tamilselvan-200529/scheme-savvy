@@ -321,7 +321,8 @@ Prioritize: india.gov.in, pmindia.gov.in, scholarships.gov.in.
 
 BEHAVIOR RULES:
 1. Do NOT hallucinate.
-2. ${langInstruction}
+2. Do NOT apologize, explain context limitations, or say things like "Please note that the context provided...". Just answer directly.
+3. ${langInstruction}
 
 OUTPUT FORMAT (MANDATORY):
 ${outputFormat}
