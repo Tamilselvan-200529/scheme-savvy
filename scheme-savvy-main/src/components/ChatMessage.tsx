@@ -3,6 +3,8 @@ import { cn } from "@/lib/utils";
 import { Bot, User, FileText, Globe, Volume2, Square, Share2, Download, Copy, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 export type SourceType = "document" | "web";
 
@@ -124,9 +126,11 @@ export function ChatMessage({ message, isLatest, currentLanguage = 'english' }: 
             </div>
           )}
 
-          <p className="text-sm leading-relaxed whitespace-pre-wrap">
-            {message.content}
-          </p>
+          <div className="text-sm leading-relaxed prose prose-sm dark:prose-invert max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {message.content}
+            </ReactMarkdown>
+          </div>
 
           {/* Source Citations */}
           {message.sources && message.sources.length > 0 && (

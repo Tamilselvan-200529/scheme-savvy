@@ -1,4 +1,6 @@
 import { Bot, Shield } from "lucide-react";
+import { DocumentLibrary } from "@/components/DocumentLibrary";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 interface HeaderProps {
   currentLanguage: string;
@@ -22,9 +24,13 @@ export function Header({ currentLanguage, onLanguageChange }: HeaderProps) {
           <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
             <div className="flex items-center justify-center gap-4">
               {/* Logo/Icon */}
-              <div className="relative">
-                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-glow animate-float">
-                  <Bot className="w-7 h-7 sm:w-8 sm:h-8 text-primary-foreground" />
+              <div 
+                className="relative cursor-pointer group" 
+                onClick={() => window.location.href = '/'}
+                title="Back to Home"
+              >
+                <div className="w-14 h-14 sm:w-16 sm:h-16 rounded-2xl bg-background border border-border/50 flex items-center justify-center shadow-soft group-hover:shadow-glow transition-all overflow-hidden">
+                  <img src="/logo.jpg" alt="Scheme Savvy Logo" className="w-full h-full object-cover" />
                 </div>
                 <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full bg-accent flex items-center justify-center shadow-soft">
                   <Shield className="w-3 h-3 text-accent-foreground" />
@@ -49,23 +55,29 @@ export function Header({ currentLanguage, onLanguageChange }: HeaderProps) {
               </div>
             </div>
 
-            {/* Language Switcher */}
-            <div className="flex bg-secondary/50 p-1 rounded-lg border border-border/50 backdrop-blur-sm">
-              {languages.map((lang) => (
-                <button
-                  key={lang.id}
-                  onClick={() => onLanguageChange(lang.id)}
-                  className={`
-                    px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 flex items-center gap-2
-                    ${currentLanguage === lang.id
-                      ? 'bg-background text-foreground shadow-sm scale-105'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
-                    }
-                  `}
-                >
-                  <span>{lang.label}</span>
-                </button>
-              ))}
+            {/* Right Controls */}
+            <div className="flex items-center gap-3">
+              <ThemeToggle />
+              <DocumentLibrary />
+              
+              {/* Language Switcher */}
+              <div className="flex bg-secondary/50 p-1 rounded-lg border border-border/50 backdrop-blur-sm">
+                {languages.map((lang) => (
+                  <button
+                    key={lang.id}
+                    onClick={() => onLanguageChange(lang.id)}
+                    className={`
+                      px-3 py-1.5 rounded-md text-sm font-medium transition-all duration-200 flex items-center gap-2
+                      ${currentLanguage === lang.id
+                        ? 'bg-background text-foreground shadow-sm scale-105'
+                        : 'text-muted-foreground hover:text-foreground hover:bg-background/50'
+                      }
+                    `}
+                  >
+                    <span>{lang.label}</span>
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 

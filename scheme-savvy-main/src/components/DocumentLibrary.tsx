@@ -1,13 +1,17 @@
 import { useState, useEffect } from "react";
-import { FileText, Upload, CheckCircle, Clock, ChevronDown, ChevronUp, Database, Trash2, RefreshCw, Globe } from "lucide-react";
+import { FileText, Upload, CheckCircle, Database, Trash2, RefreshCw, Globe } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { getDocuments, deleteDocument, uploadDocument, IndexedDocument } from "@/lib/api/chat";
-
-// ... (keep existing code)
-
-
 import { useToast } from "@/hooks/use-toast";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 const categoryColors: Record<string, string> = {
   Housing: "bg-primary/10 text-primary",
@@ -21,7 +25,7 @@ const categoryColors: Record<string, string> = {
 };
 
 export function DocumentLibrary() {
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isOpen, setIsOpen] = useState(false);
   const [documents, setDocuments] = useState<IndexedDocument[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
@@ -118,39 +122,26 @@ export function DocumentLibrary() {
   };
 
   return (
-    <div className="bg-card border border-border/50 rounded-xl shadow-soft overflow-hidden">
-      {/* Header - Always Visible */}
-      <button
-        onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between p-4 hover:bg-muted/30 transition-colors"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center">
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
+      <DialogTrigger asChild>
+        <Button variant="outline" size="icon" title="Knowledge Base" className="relative group bg-background/50 border-border/50 hover:bg-background">
+          <Database className="w-5 h-5 text-primary group-hover:scale-110 transition-transform" />
+        </Button>
+      </DialogTrigger>
+      
+      <DialogContent className="sm:max-w-[600px] max-h-[85vh] overflow-y-auto bg-card border-border/50">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
             <Database className="w-5 h-5 text-primary" />
-          </div>
-          <div className="text-left">
-            <h3 className="font-medium text-sm text-foreground">Knowledge Base</h3>
-            <p className="text-xs text-muted-foreground">
-              {documents.length} documents • {totalChunks.toLocaleString()} chunks indexed
-              {documents.length === 0 && !isLoading && " • Self-updating via web search"}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground hidden sm:block">
-            {isExpanded ? "Hide" : "Show"} documents
-          </span>
-          {isExpanded ? (
-            <ChevronUp className="w-4 h-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="w-4 h-4 text-muted-foreground" />
-          )}
-        </div>
-      </button>
+            Knowledge Base
+          </DialogTitle>
+          <DialogDescription>
+            {documents.length} documents • {totalChunks.toLocaleString()} chunks indexed
+            {documents.length === 0 && !isLoading && " • Self-updating via web search"}
+          </DialogDescription>
+        </DialogHeader>
 
-      {/* Expanded Content */}
-      {isExpanded && (
-        <div className="border-t border-border/50 animate-fade-in">
+        <div className="mt-4 animate-fade-in">
           {/* Upload Area */}
           <div
             onDragOver={handleDragOver}
@@ -300,7 +291,7 @@ export function DocumentLibrary() {
             </div>
           )}
         </div>
-      )}
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

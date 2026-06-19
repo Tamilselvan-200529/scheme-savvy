@@ -6,7 +6,6 @@ import { TypingIndicator } from "@/components/TypingIndicator";
 import { SuggestionChips } from "@/components/SuggestionChips";
 import { DisclaimerBanner } from "@/components/DisclaimerBanner";
 import { EmptyState } from "@/components/EmptyState";
-import { DocumentLibrary } from "@/components/DocumentLibrary";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useToast } from "@/hooks/use-toast";
 import { sendMessage, ChatResponse } from "@/lib/api/chat";
@@ -88,59 +87,56 @@ export default function Index() {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="h-[100dvh] bg-background flex flex-col overflow-hidden">
       {/* Header */}
       <Header currentLanguage={language} onLanguageChange={setLanguage} />
 
       {/* Main Chat Area */}
-      <main className="flex-1 flex flex-col max-w-4xl mx-auto w-full px-4 pb-4">
-        {/* Disclaimer */}
-        <div className="mb-4">
+      <main className="flex-1 min-h-0 flex flex-col max-w-4xl mx-auto w-full px-4 pt-4 pb-4">
+        
+        {/* Top Controls Area */}
+        <div className="flex flex-col gap-4 flex-shrink-0">
           <DisclaimerBanner currentLanguage={language} />
         </div>
 
-        {/* Document Library */}
-        <div className="mb-4">
-          <DocumentLibrary />
-        </div>
-
         {/* Chat Messages */}
-        <div className="flex-1 min-h-0">
-          <ScrollArea className="h-[calc(100vh-440px)] sm:h-[calc(100vh-460px)]" ref={scrollRef}>
-            <div className="space-y-4 py-4">
-              {messages.length === 0 ? (
-                <EmptyState currentLanguage={language} />
-              ) : (
-                messages.map((message, index) => (
-                  <ChatMessage
-                    key={message.id}
-                    message={message}
-                    isLatest={index === messages.length - 1}
-                    currentLanguage={language}
-                  />
-                ))
-              )}
-              {isLoading && <TypingIndicator />}
-            </div>
-          </ScrollArea>
+        <div className="flex-1 min-h-0 overflow-y-auto pr-4 -mr-4 mt-4" ref={scrollRef}>
+          <div className="space-y-4 pb-4">
+            {messages.length === 0 ? (
+              <EmptyState currentLanguage={language} />
+            ) : (
+              messages.map((message, index) => (
+                <ChatMessage
+                  key={message.id}
+                  message={message}
+                  isLatest={index === messages.length - 1}
+                  currentLanguage={language}
+                />
+              ))
+            )}
+            {isLoading && <TypingIndicator />}
+          </div>
         </div>
 
-        {/* Suggestions (show only when no messages) */}
-        {messages.length === 0 && (
-          <div className="mb-4">
-            <SuggestionChips onSelect={handleSendMessage} disabled={isLoading} currentLanguage={language} />
-          </div>
-        )}
+        {/* Footer Area (Input & Suggestions) */}
+        <div className="flex-shrink-0 pt-2 bg-background">
+          {/* Suggestions (show only when no messages) */}
+          {messages.length === 0 && (
+            <div className="mb-4">
+              <SuggestionChips onSelect={handleSendMessage} disabled={isLoading} currentLanguage={language} />
+            </div>
+          )}
 
-        {/* Input */}
-        <ChatInput onSend={handleSendMessage} isLoading={isLoading} currentLanguage={language} />
+          {/* Input */}
+          <ChatInput onSend={handleSendMessage} isLoading={isLoading} currentLanguage={language} />
 
-        {/* Footer */}
-        <footer className="mt-4 text-center">
-          <p className="text-xs text-muted-foreground">
-            Powered by official government documents • Self-updating knowledge base • Responses are informational only
-          </p>
-        </footer>
+          {/* Footer */}
+          <footer className="mt-3 text-center">
+            <p className="text-xs text-muted-foreground">
+              Powered by official government documents • Self-updating knowledge base • Responses are informational only
+            </p>
+          </footer>
+        </div>
       </main>
     </div>
   );

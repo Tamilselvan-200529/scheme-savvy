@@ -88,20 +88,15 @@ Deno.serve(async (req: Request) => {
       console.log('No local results. Triggering auto-ingestion for:', message);
 
       try {
-        // Trigger ingest function
-        await supabase.functions.invoke('ingest', {
+        // Trigger ingest function asynchronously so we don't timeout the chat request
+        // Vercel / Supabase Edge Functions timeout after 5s on free tier
+        // Using "x-invoke-async": "true" tells Supabase to run this in the background
+        supabase.functions.invoke('ingest', {
           body: { action: 'search_and_ingest', query: message }
-        });
+        }).catch(err => console.error("Async ingest failed:", err));
 
-        // Re-run search after ingestion
-        console.log('Ingestion complete. Re-running search...');
-        results = await performSearch();
-
-        // Update stats
-        const { count: newWebCount } = await supabase.from('knowledge_documents').select('*', { count: 'exact', head: true }).eq('source_type', 'web');
-        const { count: newChunkCount } = await supabase.from('knowledge_chunks').select('*', { count: 'exact', head: true });
-        kbStats.web = newWebCount || kbStats.web;
-        kbStats.chunks = newChunkCount || kbStats.chunks;
+        console.log('Ingestion triggered in background. Falling back to general knowledge for this request.');
+        // We do NOT await the result or re-run search here, to prevent 504 timeouts.
 
       } catch (ingestError) {
         console.error('Auto-ingestion failed:', ingestError);
@@ -160,68 +155,44 @@ Deno.serve(async (req: Request) => {
     // Generate response with robust fallback
     const systemPrompt = buildSystemPrompt(ragContext, sources.length > 0, kbStats, language);
 
-    // API Key Rotation Logic
-    const apiKeys = [
-      Deno.env.get('GROQ_API_KEY'),
-      Deno.env.get('GROQ_API_KEY_2'),
-      Deno.env.get('GROQ_API_KEY_3')
-    ].filter(Boolean) as string[];
-
-    // Model Fallback Logic
-    // If 70b hits limit, try 8b (it has separate quotas)
-    const modelsToTry = [
-      (Deno.env.get('GROQ_MODEL') || 'llama-3.3-70b-versatile'),
-      'llama-3.1-8b-instant'
-    ];
+    const apiKey = Deno.env.get('GEMINI_API_KEY');
 
     let response: string | null = null;
     let lastError: any = null;
 
-    if (apiKeys.length === 0) {
-      throw new Error("GROQ_API_KEY is not set in Supabase Secrets");
+    if (!apiKey) {
+      throw new Error("GEMINI_API_KEY is not set in Supabase Secrets");
     }
 
-    // Double Loop: Iterate over Models -> Then Keys
-    outerLoop:
+    const modelsToTry = [
+      'gemini-2.5-flash',
+      'gemini-2.0-flash',
+      'gemini-2.5-pro',
+      'gemini-flash-latest'
+    ];
+
     for (const model of modelsToTry) {
-      for (const key of apiKeys) {
-        try {
-          console.log(`Attempting generation with Model: ${model}, Key: ...${key.slice(-4)}`);
-          response = await generateResponse(systemPrompt, message, conversationHistory, key, model);
-
-          // If successful and we had to fallback to 8b, append a small notice (optional, but good for debugging)
-          if (model === 'llama-3.1-8b-instant') {
-            console.log("Fallback to 8b model successful");
-          }
-          break outerLoop; // Success! Exit both loops
-        } catch (error: any) {
-          console.error(`Failed (Model: ${model}, Key: ...${key.slice(-4)}):`, error.message);
-          lastError = error;
-
-          const errMsg = error.message || '';
-          // If Rate Limit or Overloaded, continue to next key/model
-          if (errMsg.includes("429") || errMsg.includes("rate limit") || errMsg.includes("quota") || errMsg.includes("overloaded")) {
-            continue;
-          }
-          // For other errors (like 400 Bad Request), we might still want to try 8b just in case it's a model specific issue? 
-          // Let's continue to be safe.
-          continue;
-        }
+      try {
+        console.log(`Attempting generation with ${model}`);
+        response = await generateResponse(systemPrompt, message, conversationHistory, apiKey, model);
+        break; // Success!
+      } catch (error: any) {
+        console.error(`${model} Failed:`, error.message);
+        lastError = error;
+        // Continue to the next model in the fallback array
       }
     }
 
-    // If we exhausted all Models AND all Keys
+    // If generation failed
     if (!response) {
-      console.error('All API keys and Models exhausted.');
+      console.error('API call failed.');
 
       // Update source label to reflect error
       sourceLabel = "System Error (Response could not be generated)";
 
       const errorMessage = lastError?.message || 'Unknown error';
       if (errorMessage.includes("429")) {
-        response = "Rate Limit Exceeded: All available keys and models are currently busy. Please try again in 1 hour.";
-      } else if (errorMessage.includes("GROQ_API_KEY")) {
-        response = "System Configuration Error: GROQ_API_KEY is missing.";
+        response = "Rate Limit Exceeded: Please try again later.";
       } else {
         response = `I encountered an internal error while generating the response. (Details: ${errorMessage})`;
       }
@@ -289,12 +260,17 @@ function buildSystemPrompt(ragContext: string, hasContext: boolean, stats: { doc
 
   let langInstruction = "- Output Language: English (Formal)";
   let outputFormat = `
-Scheme Name:
-Purpose:
-Eligibility:
-Benefits:
-How to Apply:
-Official Government Source: (If known, else say "Refer official portal")
+**Scheme Name:**
+
+**Purpose:**
+
+**Eligibility:**
+
+**Benefits:**
+
+**How to Apply:**
+
+**Official Government Source:** (If known, else say "Refer official portal")
   `;
 
   let disclaimer = `"Information is based on general knowledge. Please verify with official documents."`;
@@ -302,23 +278,33 @@ Official Government Source: (If known, else say "Refer official portal")
   if (language === 'tamil') {
     langInstruction = "- Output Language: Tamil (தமிழ்).";
     outputFormat = `
-திட்டத்தின் பெயர்:
-நோக்கம்:
-தகுதி:
-நன்மைகள்:
-விண்ணப்பிக்கும் முறை:
-அதிகாரப்பூர்வ அரசு ஆதாரம்: (தெரிந்தால், இல்லையெனில் "அதிகாரப்பூர்வ இணையதளத்தைப் பார்க்கவும்" என்று கூறவும்)
+**திட்டத்தின் பெயர்:**
+
+**நோக்கம்:**
+
+**தகுதி:**
+
+**நன்மைகள்:**
+
+**விண்ணப்பிக்கும் முறை:**
+
+**அதிகாரப்பூர்வ அரசு ஆதாரம்:** (தெரிந்தால், இல்லையெனில் "அதிகாரப்பூர்வ இணையதளத்தைப் பார்க்கவும்" என்று கூறவும்)
     `;
     disclaimer = `"தகவல்கள் பொது அறிவு அடிப்படையிலானவை. தயவுசெய்து அதிகாரப்பூர்வ ஆவணங்களை சரிபார்க்கவும்."`;
   } else if (language === 'hindi') {
     langInstruction = "- Output Language: Hindi (हिंदी). Use clear Devanagari script.";
     outputFormat = `
-योजना का नाम:
-उद्देश्य:
-पात्रता:
-लाभ:
-आवेदन कैसे करें:
-आधिकारिक सरकारी स्रोत: (यदि ज्ञात हो, अन्यथा कहें "आधिकारिक पोर्टल देखें")
+**योजना का नाम:**
+
+**उद्देश्य:**
+
+**पात्रता:**
+
+**लाभ:**
+
+**आवेदन कैसे करें:**
+
+**आधिकारिक सरकारी स्रोत:** (यदि ज्ञात हो, अन्यथा कहें "आधिकारिक पोर्टल देखें")
     `;
     disclaimer = `"जानकारी सामान्य ज्ञान पर आधारित है। कृपया आधिकारिक दस्तावेजों से सत्यापित करें।"`;
   }
@@ -328,6 +314,7 @@ Official Government Source: (If known, else say "Refer official portal")
 YOUR CORE RULE:
 1. IF context is present, use it strictly.
 2. IF context is empty, use your general knowledge to help the user, but explicitly state it is general info.
+3. Format your responses using beautiful Markdown. Use bold headings (**Heading**), bullet points, numbered lists, and proper spacing to make the answer easy to read.
 
 DATA SOURCE POLICY:
 Prioritize: india.gov.in, pmindia.gov.in, scholarships.gov.in.
@@ -349,30 +336,30 @@ async function generateResponse(
   systemPrompt: string,
   userMessage: string,
   history: Message[],
-  apiKey: string
+  apiKey: string,
+  modelName: string
 ): Promise<string> {
 
-  const messages = [
-    { role: 'system', content: systemPrompt },
-    ...history.slice(-4),
-    { role: 'user', content: userMessage }
-  ];
+  const geminiMessages = history.slice(-4).map(m => ({
+    role: m.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: m.content }]
+  }));
+  geminiMessages.push({ role: 'user', parts: [{ text: userMessage }] });
 
-  // Use configured model or fallback to high-quality model
-  const model = Deno.env.get('GROQ_MODEL') || 'llama-3.3-70b-versatile';
-  console.log('Using Groq Model:', model);
+  console.log(`Using Google Gemini API: ${modelName}`);
 
-  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`, {
     method: 'POST',
     headers: {
-      'Authorization': `Bearer ${apiKey}`,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({
-      model: model,
-      messages,
-      temperature: 0.1,
-      max_tokens: 512
+      systemInstruction: { parts: [{ text: systemPrompt }] },
+      contents: geminiMessages,
+      generationConfig: {
+        temperature: 0.1,
+        maxOutputTokens: 1024
+      }
     })
   });
 
@@ -381,7 +368,11 @@ async function generateResponse(
   }
 
   const data = await response.json();
-  return data.choices[0].message.content;
+  if (!data.candidates || data.candidates.length === 0) {
+    throw new Error("No candidates returned from Gemini API");
+  }
+  
+  return data.candidates[0].content.parts[0].text;
 }
 
 function cleanContent(text: string): string {

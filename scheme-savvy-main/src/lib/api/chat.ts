@@ -74,8 +74,8 @@ export async function deleteDocument(documentId: string): Promise<void> {
 
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Set worker to local public file to avoid CDN issues
-pdfjsLib.GlobalWorkerOptions.workerSrc = '/pdf.worker.min.mjs';
+// Use UNPKG CDN to ensure the worker version always matches the installed API version
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 export async function uploadDocument(file: File): Promise<void> {
   try {
